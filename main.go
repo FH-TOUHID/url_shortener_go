@@ -1,64 +1,55 @@
 package main
 
-
 import (
-
-	"os"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/joho/godotenv"
-
-	"url-shortener/config"
-
-	"url-shortener/routes"
-
+	"url-shortener/utils"
 )
+var urls = map[string]string{}
 
-
-
-func main(){
-
-
-	// load .env
-
-	err := godotenv.Load()
-
-	if err != nil {
-
-		panic("env file not loaded")
-
+func shortenURL(c *gin.Context) {
+	var body struct {
+		URL string `json:"url"`
 	}
 
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request",
+		})
+		return
+	}
 
+	code := utils.GenerateCode(6)
+	urls[code] = body.URL
 
-	// connect mongodb
+	c.JSON(http.StatusCreated, gin.H{
+		"short_url": "http://localhost:5000/" + code,
+		"code":      code,
+	})
+}
 
-	config.ConnectMongo()
+func getURL(c *gin.Context) {
+	code := c.Param("code")
 
+	originalURL, found := urls[code]
 
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "URL not found",
+		})
+		return
+	}
 
-	// create gin server
+	c.Redirect(http.StatusFound, originalURL)
+}
 
+func main() {
 	router := gin.Default()
 
+	router.POST("/shorten", shortenURL)
+	router.GET("/:code", getURL)
 
-
-	// register routes
-
-	routes.SetupRoutes(router)
-
-
-
-	port := os.Getenv(
-		"SERVER_PORT",
-	)
-
-
-
-	router.Run(
-		":"+port,
-	)
-
-
+	router.Run(":5000")
 }
